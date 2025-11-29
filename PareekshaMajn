@@ -1,1 +1,429 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Calendar, 
+  Clock, 
+  BookOpen, 
+  CheckCircle, 
+  Plus, 
+  Trash2, 
+  Settings, 
+  Award, 
+  ArrowRight, 
+  RotateCcw,
+  Download
+} from 'lucide-react';
+
+const App = () => {
+  // --- State Management ---
+  const [step, setStep] = useState(1); // 1: Basics, 2: Subjects, 3: Review/Generate
+  const [schedule, setSchedule] = useState(null);
+  
+  // User Inputs
+  const [config, setConfig] = useState({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0],
+    dailyHours: 4,
+    startTime: "09:00",
+    breakInterval: 50, // minutes of study
+    breakDuration: 10, // minutes of break
+  });
+
+  const [subjects, setSubjects] = useState([
+    { id: 1, name: 'Mathematics', difficulty: 5, color: 'bg-blue-500' },
+    { id: 2, name: 'History', difficulty: 3, color: 'bg-amber-500' },
+  ]);
+
+  // --- Logic & Helpers ---
+
+  const handleConfigChange = (e) => {
+    setConfig({ ...config, [e.target.name]: e.target.value });
+  };
+
+  const addSubject = () => {
+    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    setSubjects([
+      ...subjects, 
+      { 
+        id: Date.now(), 
+        name: '', 
+        difficulty: 3, 
+        color: randomColor 
+      }
+    ]);
+  };
+
+  const updateSubject = (id, field, value) => {
+    setSubjects(subjects.map(sub => sub.id === id ? { ...sub, [field]: value } : sub));
+  };
+
+  const removeSubject = (id) => {
+    setSubjects(subjects.filter(sub => sub.id !== id));
+  };
+
+  const generateSchedule = () => {
+    const start = new Date(config.startDate);
+    const end = new Date(config.endDate);
+    const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    
+    if (totalDays <= 0) {
+      alert("End date must be after start date");
+      return;
+    }
+
+    // Calculate total "weight" of all subjects to distribute time fairly but based on difficulty
+    const totalDifficulty = subjects.reduce((acc, sub) => acc + parseInt(sub.difficulty), 0);
+    
+    let currentDay = new Date(start);
+    let newSchedule = [];
+
+    // Loop through each day
+    for (let i = 0; i < totalDays; i++) {
+      let dailySessions = [];
+      let currentTime = new Date(`2000-01-01T${config.startTime}`); // Dummy date, real time
+      
+      // Calculate how many sessions we can fit in the daily hours
+      // Convert daily hours to minutes
+      const totalMinutesAvailable = parseFloat(config.dailyHours) * 60;
+      const cycleTime = parseInt(config.breakInterval) + parseInt(config.breakDuration);
+      const numberOfSessions = Math.floor(totalMinutesAvailable / cycleTime);
+
+      // Distribute sessions
+      for (let s = 0; s < numberOfSessions; s++) {
+        // Weighted random selection (deterministic for this demo loop for better distribution)
+        // We simply loop through subjects based on their difficulty weight
+        
+        // Simple algorithm: assign subject based on round-robin weighted distribution
+        // For a more complex app, we'd track "hours needed" vs "hours completed"
+        const subjectIndex = (i * numberOfSessions + s) % subjects.length;
+        const subject = subjects[subjectIndex]; // Simplified distribution for demo
+
+        const sessionStart = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Advance time
+        currentTime.setMinutes(currentTime.getMinutes() + parseInt(config.breakInterval));
+        const sessionEnd = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Add Break
+        currentTime.setMinutes(currentTime.getMinutes() + parseInt(config.breakDuration));
+
+        dailySessions.push({
+          subject: subject.name,
+          color: subject.color,
+          start: sessionStart,
+          end: sessionEnd,
+          type: 'study'
+        });
+      }
+
+      newSchedule.push({
+        date: new Date(currentDay).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
+        sessions: dailySessions
+      });
+
+      // Next day
+      currentDay.setDate(currentDay.getDate() + 1);
+    }
+
+    setSchedule(newSchedule);
+    setStep(3);
+  };
+
+  const printSchedule = () => {
+    window.print();
+  };
+
+  // --- Render Components ---
+
+  const ProgressBar = () => (
+    <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+      <div 
+        className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500 ease-in-out" 
+        style={{ width: `${(step / 3) * 100}%` }}
+      ></div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-10 print:hidden">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <BookOpen className="text-indigo-600 w-8 h-8" />
+            <h1 className="text-2xl font-bold text-slate-800">StudySync</h1>
+          </div>
+          {step === 3 && (
+            <button 
+              onClick={() => setStep(1)} 
+              className="text-sm text-slate-500 hover:text-indigo-600 flex items-center gap-1"
+            >
+              <RotateCcw size={16} /> New Plan
+            </button>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <ProgressBar />
+
+        {/* STEP 1: Time Configuration */}
+        {step === 1 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8 animate-fade-in">
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <Clock className="text-indigo-500" /> Time Constraints
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Start Date</label>
+                <input 
+                  type="date" 
+                  name="startDate"
+                  value={config.startDate} 
+                  onChange={handleConfigChange}
+                  className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Exam / End Date</label>
+                <input 
+                  type="date" 
+                  name="endDate"
+                  value={config.endDate} 
+                  onChange={handleConfigChange}
+                  className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Daily Study Hours</label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="12" 
+                    step="0.5"
+                    name="dailyHours"
+                    value={config.dailyHours} 
+                    onChange={handleConfigChange}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  />
+                  <span className="text-lg font-bold min-w-[3rem]">{config.dailyHours}h</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Daily Start Time</label>
+                <input 
+                  type="time" 
+                  name="startTime"
+                  value={config.startTime} 
+                  onChange={handleConfigChange}
+                  className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-gray-400" /> Study Method
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Study Block (Minutes)</label>
+                    <select 
+                      name="breakInterval" 
+                      value={config.breakInterval} 
+                      onChange={handleConfigChange}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg"
+                    >
+                      <option value="25">25 min (Pomodoro)</option>
+                      <option value="45">45 min (Academic Hour)</option>
+                      <option value="50">50 min (Standard)</option>
+                      <option value="90">90 min (Deep Work)</option>
+                    </select>
+                 </div>
+                 <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Break Duration (Minutes)</label>
+                    <select 
+                      name="breakDuration" 
+                      value={config.breakDuration} 
+                      onChange={handleConfigChange}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg"
+                    >
+                      <option value="5">5 min (Short)</option>
+                      <option value="10">10 min (Medium)</option>
+                      <option value="15">15 min (Long)</option>
+                    </select>
+                 </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button 
+                onClick={() => setStep(2)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors"
+              >
+                Next Step <ArrowRight size={20} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: Subject Details */}
+        {step === 2 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8 animate-fade-in">
+            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+              <Award className="text-indigo-500" /> Subjects
+            </h2>
+            <p className="text-slate-500 mb-6">List what you need to study and rate difficulty (1 = Easy, 5 = Hard).</p>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+              {subjects.map((subject, index) => (
+                <div key={subject.id} className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-slate-50 p-4 rounded-lg border border-slate-100">
+                  <div className={`w-3 h-3 rounded-full mt-2 md:mt-0 ${subject.color}`}></div>
+                  
+                  <div className="flex-grow w-full md:w-auto">
+                    <input 
+                      type="text" 
+                      placeholder="Subject Name (e.g., Biology)" 
+                      value={subject.name}
+                      onChange={(e) => updateSubject(subject.id, 'name', e.target.value)}
+                      className="w-full bg-transparent border-b-2 border-transparent focus:border-indigo-500 outline-none font-medium text-lg px-2 py-1"
+                      autoFocus={index === subjects.length - 1}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full md:w-auto">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Difficulty</span>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="5" 
+                      value={subject.difficulty}
+                      onChange={(e) => updateSubject(subject.id, 'difficulty', e.target.value)}
+                      className="w-24 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <span className="font-mono font-bold w-4">{subject.difficulty}</span>
+                  </div>
+
+                  <button 
+                    onClick={() => removeSubject(subject.id)}
+                    className="text-slate-400 hover:text-red-500 p-2"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={addSubject}
+              className="mt-4 w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 font-medium hover:border-indigo-500 hover:text-indigo-600 transition-colors flex justify-center items-center gap-2"
+            >
+              <Plus size={20} /> Add Another Subject
+            </button>
+
+            <div className="mt-8 flex justify-between">
+              <button 
+                onClick={() => setStep(1)}
+                className="text-slate-500 hover:text-indigo-600 font-medium px-4"
+              >
+                Back
+              </button>
+              <button 
+                onClick={generateSchedule}
+                disabled={subjects.some(s => !s.name)}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-indigo-200"
+              >
+                Generate Study Guide <CheckCircle size={20} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: The Schedule */}
+        {step === 3 && schedule && (
+          <div className="animate-fade-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 print:hidden">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900">Your Study Plan</h2>
+                <p className="text-slate-500">
+                  {schedule.length} days of structured focus ({config.dailyHours}h / day)
+                </p>
+              </div>
+              <button 
+                onClick={printSchedule}
+                className="bg-white border border-slate-200 hover:border-indigo-500 text-slate-700 hover:text-indigo-600 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all shadow-sm"
+              >
+                <Download size={18} /> Print / Save PDF
+              </button>
+            </div>
+
+            <div className="space-y-6 print:space-y-4">
+              {schedule.map((day, idx) => (
+                <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden break-inside-avoid print:shadow-none print:border-slate-300">
+                  <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center print:bg-slate-100">
+                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                      <Calendar size={18} className="text-indigo-500" /> 
+                      {day.date}
+                    </h3>
+                    <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      {day.sessions.length} Sessions
+                    </span>
+                  </div>
+                  
+                  <div className="divide-y divide-slate-50">
+                    {day.sessions.length > 0 ? (
+                      day.sessions.map((session, sIdx) => (
+                        <div key={sIdx} className="px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                          <div className="text-sm font-mono text-slate-500 whitespace-nowrap w-24">
+                            {session.start} - {session.end}
+                          </div>
+                          
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${session.color}`}></div>
+                          
+                          <div className="flex-grow">
+                            <h4 className="font-semibold text-slate-800">{session.subject}</h4>
+                            <p className="text-xs text-slate-500">Focus Session</p>
+                          </div>
+                          
+                          <div className="w-5 h-5 rounded-full border-2 border-slate-200 hover:border-green-500 cursor-pointer print:hidden"></div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-6 text-center text-slate-400 italic">
+                        Rest day or no hours available.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-12 text-center text-slate-400 text-sm print:mt-4">
+              <p>Generated by StudySync. Good luck with your studies!</p>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <style>{`
+        @media print {
+          @page { margin: 2cm; }
+          body { -webkit-print-color-adjust: exact; }
+          .print\\:hidden { display: none !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          .print\\:bg-slate-100 { background-color: #f1f5f9 !important; }
+          .print\\:space-y-4 > :not([hidden]) ~ :not([hidden]) { --tw-space-y-reverse: 0; margin-top: 1rem; margin-bottom: 1rem; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
+
 
